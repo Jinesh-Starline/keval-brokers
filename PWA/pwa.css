@@ -1,0 +1,23 @@
+/* Phone layout on top of styles.css: bottom navigation, bigger touch targets, tables that scroll sideways. */
+html, body { overscroll-behavior: none; }
+body { -webkit-tap-highlight-color: transparent; }
+input, select, textarea { font-size: 16px; } /* stops iPhone zooming in on focus */
+.btn { min-height: 40px; }
+
+@media (max-width: 760px) {
+  .shell { height: 100dvh; grid-template-rows: minmax(0, 1fr) auto; }
+  main { grid-row: 1; padding: 16px 12px 24px; }
+  .side { grid-row: 2; display: block; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); }
+  .logo, .side-foot { display: none; }
+  nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  nav button { flex-direction: column; justify-content: center; align-items: center; gap: 2px; padding: 6px 4px; font-size: 12px; text-align: center; }
+  h1 { font-size: 24px; }
+  .page-head { margin-bottom: 14px; }
+  .date-ctl { flex-wrap: wrap; }
+  .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .line { grid-template-columns: minmax(0, 1fr) 110px 34px; }
+  .msg-grid { grid-template-columns: minmax(0, 1fr); }
+  .ledger, .list { overflow-x: auto; }
+  .ledger table, .list table { min-width: 640px; }
+  .toast { bottom: 90px; width: calc(100vw - 24px); text-align: center; }
+}

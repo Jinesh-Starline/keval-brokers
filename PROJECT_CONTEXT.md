@@ -11,7 +11,7 @@ Current version: 0.2. Plain JavaScript, no framework, no build step. Offline onl
 
 - Sellers and buyers are different parties. Example sellers: Vrundavan Trading (Kalavad). Example buyers: Ganesh Oil Industries, Balaji Proteins (both Upleta).
 - The broker is paid brokerage per bag. The yearly bill goes to the party that pays (in the sample, the seller Vrundavan). The bill lists every deal: date, other party, city, bags, rate, brokerage.
-- Brokerage rule seen in the real bill: bags x Rs 1.5, rounded DOWN to the nearest Rs 5. 350 bags = 525, 700 = 1050, 325 = 487.5 -> 485, 425 = 637.5 -> 635, 400 = 600. The 13 deals of the 2024-25 bill total Rs 7,495 (this is a test).
+- Brokerage rule seen in the real bill: bags x Rs 2, rounded DOWN to the nearest Rs 5. 350 bags = 525, 700 = 1050, 325 = 487.5 -> 485, 425 = 637.5 -> 635, 400 = 600. The 13 deals of the 2024-25 bill total Rs 7,495 (this is a test).
 - Bill layout (reproduced in the app): broker name, mobile and address top left; bank, SB A/C, IFSC, PAN top right; big firm name; party name underlined; "BROKERAGE BILL 2024-25"; table DATE | PARTY NAME | CITY | BAG | RATE | RS.; TOTAL row. The rate column shows things like `24,000/500/-` where "/500" is an extra (exact meaning not yet confirmed).
 - Deals are entered at the end of the day (EOD), then a WhatsApp message goes to both the seller and the buyer.
 - Quantity is counted in bags, trucks, small cargo vans etc., NOT quintal or ton.

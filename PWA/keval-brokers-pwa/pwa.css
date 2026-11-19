@@ -1,0 +1,93 @@
+/* Phone layout on top of styles.css: bottom navigation, bigger touch targets, tables turned into cards. */
+html, body { overscroll-behavior: none; }
+body { -webkit-tap-highlight-color: transparent; }
+input, select, textarea { font-size: 16px; } /* stops iPhone zooming in on focus */
+.btn { min-height: 40px; }
+
+@media (max-width: 760px) {
+  /* shell: content on top, navigation at the bottom */
+  .shell { height: 100dvh; grid-template-rows: minmax(0, 1fr) auto; }
+  main { grid-row: 1; padding: calc(16px + env(safe-area-inset-top)) 12px 24px; }
+  .side { grid-row: 2; display: block; padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); }
+  .logo, .side-foot { display: none; }
+  nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  nav button { flex-direction: column; justify-content: center; align-items: center; gap: 2px; padding: 6px 4px; font-size: 12px; text-align: center; }
+
+  /* headings, forms, panels */
+  h1 { font-size: 24px; }
+  .page-head { margin-bottom: 14px; }
+  .date-ctl { flex-wrap: wrap; }
+  .date-ctl input { flex: 1 1 140px; min-width: 0; }
+  .panel { padding: 14px; }
+  .line { grid-template-columns: minmax(0, 1fr) 110px 34px; }
+  .form-foot, .wa-head, .ledger-head, .vcf-head { flex-wrap: wrap; }
+  .wa-head { flex-direction: column; align-items: stretch; }
+  .form-foot .btns { margin-left: auto; }
+  .msg-actions .btn { flex: 1 1 auto; }
+  .msg-grid { grid-template-columns: minmax(0, 1fr); }
+  .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .strip > div { border-left: 0; border-top: 1px solid var(--rule-2); }
+  .strip > div:nth-child(even) { border-left: 1px solid var(--rule-2); }
+  .strip > div:nth-child(-n+2) { border-top: 0; }
+  .toast { bottom: 90px; width: calc(100vw - 24px); text-align: center; }
+
+  /* deals ledger and parties list: every row becomes a card */
+  .ledger::before { display: none; }
+  .ledger-head { padding: 14px 14px 8px; }
+  .ledger .none { padding: 18px 14px; }
+  .ledger table, .ledger tbody, .list table, .list tbody { display: block; min-width: 0; }
+  .ledger thead, .list thead { display: none; }
+  .ledger tr, .list tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; padding: 12px 14px; border-bottom: 1px solid var(--rule); }
+  .list tr:last-child { border-bottom: 0; }
+  .ledger tbody tr:nth-child(even) { background: rgba(205, 216, 232, .16); }
+  .ledger tbody tr.editing { background: var(--jute-bg); }
+  .ledger tbody tr:nth-child(even) td, .ledger tbody tr.editing td { background: none; }
+  .ledger td, .list td { display: block; padding: 0; border: 0; width: auto; text-align: left; }
+  .ledger td:nth-child(2) { padding-left: 0; }
+  .ledger td.num { text-align: left; }
+  .ledger td:nth-child(n+3)::before, .list td:nth-child(n+2)::before { display: block; font-size: 12px; color: var(--ink-2); font-family: var(--font); }
+  .row-actions { justify-content: flex-start; flex-wrap: wrap; }
+
+  .ledger td:first-child { display: none; }
+  .ledger td:nth-child(2), .ledger td:nth-child(7) { grid-column: 1 / -1; }
+  .ledger td:nth-child(3)::before { content: 'Commodity'; }
+  .ledger td:nth-child(4)::before { content: 'Quantity'; }
+  .ledger td:nth-child(5)::before { content: 'Rate'; }
+  .ledger td:nth-child(6)::before { content: 'Bags'; }
+
+  .list td:nth-child(1), .list td:nth-child(5), .list td:nth-child(6) { grid-column: 1 / -1; }
+  .list td:nth-child(2)::before { content: 'WhatsApp'; }
+  .list td:nth-child(3)::before { content: 'Role'; }
+  .list td:nth-child(4)::before { content: 'Account'; }
+  .list td:nth-child(5)::before { content: 'Brokerage'; }
+
+  /* contact import grid (.vcf): same card idea, one contact per card */
+  .grid-scroll { max-height: 60vh; }
+  .vcf-table { min-width: 0; }
+  .vcf-table, .vcf-table tbody { display: block; }
+  .vcf-table thead { display: none; }
+  .vcf-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; padding: 12px; border-bottom: 1px solid var(--rule); }
+  .vcf-table td, .vcf-table td:first-child { display: block; width: auto; padding: 0; border: 0; text-align: left; }
+  .vcf-table td:nth-child(8), .vcf-table td:nth-child(9) { width: auto; }
+  .vcf-table input[type=checkbox] { width: 22px; height: 22px; vertical-align: middle; }
+  .vcf-table td:first-child { grid-column: 1 / -1; }
+  .vcf-table td:first-child::after { content: ' Import this contact'; font-size: 14px; }
+  .vcf-table td:nth-child(2) { grid-column: 1 / -1; }
+  .vcf-table td:nth-child(n+2)::before { display: block; font-size: 12px; color: var(--ink-2); margin-bottom: 2px; }
+  .vcf-table td:nth-child(2)::before { content: 'Party name'; }
+  .vcf-table td:nth-child(3)::before { content: 'WhatsApp number'; }
+  .vcf-table td:nth-child(4)::before { content: 'City'; }
+  .vcf-table td:nth-child(5)::before { content: 'Role'; }
+  .vcf-table td:nth-child(6)::before { content: 'Broker account'; }
+  .vcf-table td:nth-child(7)::before { content: 'Pays brokerage'; }
+  .vcf-table td:nth-child(8)::before { content: 'Rupees per bag'; }
+  .vcf-table td:nth-child(9)::before { content: 'Round down to'; }
+
+  /* bill preview: smaller type, table scrolls sideways inside the paper */
+  .paper { padding: 16px 14px 20px; font-size: 12px; overflow-x: auto; }
+  .paper .hdr { flex-direction: column; gap: 8px; }
+  .paper .hdr div:last-child { text-align: left; }
+  .paper .firm { font-size: 28px; }
+  .paper .party { font-size: 18px; }
+  .paper table { min-width: 480px; }
+}

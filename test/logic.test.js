@@ -20,7 +20,7 @@ const bigDb = {
   parties: [
     { id: 's1', name: 'Seller A', city: 'Upleta', role: 'seller', brokerId: 'keval', charge: true, rule: { perBag: 2, roundStep: 0 } },
     { id: 's2', name: 'Seller B', city: 'Jetpur', role: 'seller', brokerId: 'chetan', charge: true, rule: { perBag: 2, roundStep: 0 } },
-    { id: 'b1', name: 'Buyer X', city: 'Rajkot', role: 'buyer', brokerId: 'keval', charge: false, rule: { perBag: 1.5, roundStep: 5 } },
+    { id: 'b1', name: 'Buyer X', city: 'Rajkot', role: 'buyer', brokerId: 'keval', charge: false, rule: { perBag: 2, roundStep: 5 } },
   ],
   deals: [
     { id: 'd1', date: '2025-05-01', seller: 's1', buyer: 'b1', commodity: 'groundnut', qty: 75000, qtyUnit: 'bags', lines: [{ variety: '', rate: 1000 }], actualBags: null, createdAt: 1 },

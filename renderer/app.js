@@ -24,7 +24,16 @@
 
   // ---------- data ----------
   function emptyDb() {
-    return { version: 2, settings: JSON.parse(JSON.stringify(L.DEFAULT_SETTINGS)), parties: [], deals: [], sent: {} };
+    return { version: 2, settings: JSON.parse(JSON.stringify(L.DEFAULT_SETTINGS)), parties: [], deals: [], sent: {}, deleted: {}, device: newDevice() };
+  }
+  const newDevice = () => ({ id: 'dev-' + L.newId(), name: window.DEVICE_NAME || 'Computer' });
+  /* Sync stamps: every create/change of a deal or party calls touch(); a delete calls markDeleted(). */
+  const touch = (o) => { o.updatedAt = Date.now(); o.updatedFrom = db.device.id; return o; };
+  const markDeleted = (id) => { db.deleted[id] = { updatedAt: Date.now(), updatedFrom: db.device.id }; };
+  function stampMissing() {
+    let n = 0;
+    db.deals.concat(db.parties).forEach((o) => { if (!o.updatedAt) { touch(o); n++; } });
+    return n;
   }
   let saveTimer;
   function save() {
@@ -307,17 +316,18 @@
         date: d.date, seller: d.seller, buyer: d.buyer, commodity: d.commodity, qty: Number(d.qty), qtyUnit: d.qtyUnit,
         lines: newLines, extra: d.extra.trim(), note: d.note.trim(), actualBags: sameQty ? deal.actualBags : null,
       });
+      touch(deal);
       day = deal.date;
       stopEditing();
       save();
       renderToday();
       return toast('Deal updated. Messages with this deal show the change, so they can be sent again.');
     }
-    db.deals.push({
+    db.deals.push(touch({
       id: L.newId(), date: day, seller: d.seller, buyer: d.buyer, commodity: d.commodity,
       qty: Number(d.qty), qtyUnit: d.qtyUnit, lines: lines.map((l) => ({ variety: l.variety.trim(), rate: Number(l.rate) })),
       extra: d.extra.trim(), note: d.note.trim(), actualBags: null, createdAt: Date.now(),
-    });
+    }));
     draft = Object.assign(newDraft(), { seller: d.seller, buyer: d.buyer, commodity: d.commodity, qtyUnit: d.qtyUnit, lines: d.lines.map((l) => ({ variety: l.variety, rate: '' })) });
     save();
     renderToday();
@@ -339,6 +349,7 @@
       deal.lines.forEach((l) => delete l.bags);
       deal.actualBags = Number(val('total'));
     }
+    touch(deal);
     bagsEdit = null;
     save();
     renderToday();
@@ -384,7 +395,7 @@
       <div class="vcf-head">
         <div>
           <h2>Review contacts from VCF (${selCount} of ${vcfRows.length} selected)</h2>
-          <p class="help">Edit Name, City, Role, Broker Account, and Brokerage details in the grid below before importing.</p>
+          <p class="help">Tick the contacts you want. Only ticked rows can be edited: Name, City, Role, Broker Account and Brokerage details.</p>
         </div>
         <div class="btns">
           <button class="btn sm" type="button" data-act="vcf-all">Select all</button>
@@ -409,23 +420,24 @@
           <tbody>
             ${vcfRows.map((r, i) => {
               const dup = (r.phone && existingPhones.has(L.normalizePhone(r.phone))) || (r.name && existingNames.has(r.name.trim().toLowerCase()));
+              const off = r.selected ? '' : ' disabled'; // only ticked rows can be edited
               return `<tr class="${r.selected ? '' : 'row-dim'}" data-idx="${i}">
                 <td><input type="checkbox" name="sel" ${r.selected ? 'checked' : ''} /></td>
-                <td><input name="name" value="${esc(r.name)}" placeholder="Party name" />${dup ? '<div class="hint">Already in Parties</div>' : ''}</td>
-                <td><input name="phone" value="${esc(r.phone)}" placeholder="10 digit mobile" /></td>
-                <td><input name="city" value="${esc(r.city)}" placeholder="City" /></td>
-                <td><select name="role">
+                <td><input name="name" value="${esc(r.name)}" placeholder="Party name"${off} />${dup ? '<div class="hint">Already in Parties</div>' : ''}</td>
+                <td><input name="phone" value="${esc(r.phone)}" placeholder="10 digit mobile"${off} /></td>
+                <td><input name="city" value="${esc(r.city)}" placeholder="City"${off} /></td>
+                <td><select name="role"${off}>
                   <option value="seller"${r.role === 'seller' ? ' selected' : ''}>Seller</option>
                   <option value="buyer"${r.role === 'buyer' ? ' selected' : ''}>Buyer</option>
                   <option value="both"${r.role === 'both' ? ' selected' : ''}>Both</option>
                 </select></td>
-                <td><select name="brokerId">${brokerOptions(r.brokerId || 'keval')}</select></td>
-                <td><select name="charge">
+                <td><select name="brokerId"${off}>${brokerOptions(r.brokerId || 'keval')}</select></td>
+                <td><select name="charge"${off}>
                   <option value="1"${r.charge ? ' selected' : ''}>Yes</option>
                   <option value="0"${r.charge ? '' : ' selected'}>No</option>
                 </select></td>
-                <td><input name="perBag" type="number" step="any" min="0" value="${r.perBag}" /></td>
-                <td><input name="roundStep" type="number" step="any" min="0" value="${r.roundStep}" /></td>
+                <td><input name="perBag" type="number" step="any" min="0" value="${r.perBag}"${off} /></td>
+                <td><input name="roundStep" type="number" step="any" min="0" value="${r.roundStep}"${off} /></td>
               </tr>`;
             }).join('')}
           </tbody>
@@ -445,7 +457,7 @@
       if (r.phone.trim() && !L.normalizePhone(r.phone)) {
         return toast('Invalid WhatsApp number for "' + name + '". Use a 10 digit mobile number or clear it.');
       }
-      db.parties.push({
+      db.parties.push(touch({
         id: L.newId(),
         name,
         city: r.city.trim(),
@@ -457,7 +469,7 @@
           perBag: isFinite(r.perBag) && r.perBag >= 0 ? r.perBag : L.DEFAULT_RULE.perBag,
           roundStep: isFinite(r.roundStep) && r.roundStep >= 0 ? r.roundStep : L.DEFAULT_RULE.roundStep,
         },
-      });
+      }));
       added++;
     }
     vcfRows = null;
@@ -467,7 +479,7 @@
   }
 
   function renderParties() {
-    const p = editingParty === 'new' ? { id: '', name: '', city: '', phone: '', role: 'buyer', brokerId: 'keval', charge: false, rule: { perBag: 1.5, roundStep: 5 } } : party(editingParty);
+    const p = editingParty === 'new' ? { id: '', name: '', city: '', phone: '', role: 'buyer', brokerId: 'keval', charge: true, rule: { perBag: 2, roundStep: 5 } } : party(editingParty);
     $('#view').innerHTML = `<div class="page stack">
       <div class="page-head">
         <div><h1>Parties</h1><p class="sub">Sellers and buyers, with their WhatsApp number, broker account, and brokerage rate.</p></div>
@@ -491,7 +503,7 @@
             <label>Rupees per bag<input name="perBag" type="number" step="any" min="0" value="${p.rule.perBag}" /></label>
             <label>Round down to nearest rupees<input name="roundStep" type="number" step="any" min="0" value="${p.rule.roundStep}" /></label>
           </div>
-          <div class="form-foot"><span class="muted">325 bags at 1.5, rounded down to 5, is billed as 485.</span>
+          <div class="form-foot"><span class="muted">325 bags at ${p.rule.perBag}, rounded down to ${p.rule.roundStep}, is billed as ${L.calcBrokerage(325, p.rule)}.</span>
             <span><button class="btn" type="button" data-act="cancel-party">Cancel</button> <button class="btn primary" type="submit">Save party</button></span></div>
         </form></section>` : ''}
       <section class="list">${db.parties.length ? `<table><thead><tr><th>Party</th><th>WhatsApp</th><th>Role</th><th>Account</th><th>Brokerage</th><th></th></tr></thead><tbody>
@@ -513,8 +525,8 @@
       brokerId: f.brokerId.value || 'keval',
       charge: f.charge.value === '1', rule: { perBag: Number(f.perBag.value), roundStep: Number(f.roundStep.value) },
     };
-    if (editingParty === 'new') db.parties.push(Object.assign({ id: L.newId() }, data));
-    else Object.assign(party(editingParty), data);
+    if (editingParty === 'new') db.parties.push(touch(Object.assign({ id: L.newId() }, data)));
+    else touch(Object.assign(party(editingParty), data));
     editingParty = null;
     save();
     renderParties();
@@ -613,6 +625,13 @@
         </section>`).join('')}
         <div><button class="btn primary" type="submit">Save settings</button></div>
       </form>
+      <section class="panel"><h2>Sync between devices</h2>
+        <p class="help">Export a sync file here, send it to the other device, and import it there. Do the same the other way round. Both devices end with the latest version of every deal and party. If the same deal was changed on both, the later change wins.</p>
+        <div class="chips">
+          <button class="btn primary" data-act="export-sync">Export sync file</button>
+          <button class="btn" data-act="import-sync">Import sync file</button>
+        </div>
+      </section>
       <section class="panel"><h2>Excel / CSV Backup &amp; Restore (All Years)</h2>
         <p class="help">All your deals and parties are stored permanently on this computer with daily backups (never deleted). You can also export or import Excel CSV files anytime.</p>
         <div class="chips">
@@ -665,6 +684,7 @@
     }
     db.parties = res.parties;
     db.deals = res.deals;
+    stampMissing();
     save();
     render();
     toast('Imported ' + res.added + ' deals' + (res.createdParties ? ', added ' + res.createdParties + ' new parties' : '') + (res.skipped ? ' (' + res.skipped + ' skipped).' : '.'));
@@ -680,9 +700,25 @@
     const res = L.parsePartiesCsv(file.content, db.parties, db.settings);
     if (!res.added && !res.updated) return toast('No valid party rows found in CSV.');
     db.parties = res.parties;
+    stampMissing();
     save();
     render();
     toast('Parties imported: ' + res.added + ' added, ' + res.updated + ' updated.');
+  }
+  async function handleExportSync() {
+    const saved = await api.saveFile(L.exportSync(db), 'Keval-Brokers-Sync-' + L.todayISO() + '.json', [{ name: 'Sync file', extensions: ['json'] }]);
+    if (saved) toast('Sync file saved. Send it to the other device and import it there.');
+  }
+  async function handleImportSync() {
+    const file = await api.openFile([{ name: 'Sync file', extensions: ['json'] }]);
+    if (!file) return;
+    const res = L.mergeSync(db, file.content);
+    if (res.error) return toast(res.error);
+    db.parties = res.parties; db.deals = res.deals; db.deleted = res.deleted; db.sent = res.sent;
+    save();
+    render();
+    const s = res.stats;
+    toast('Sync done: ' + s.dealsAdded + ' new, ' + s.dealsUpdated + ' updated, ' + s.dealsRemoved + ' removed deals; ' + (s.partiesAdded + s.partiesUpdated) + ' parties added or updated.');
   }
   async function handleImportVcf() {
     const file = await api.openFile([{ name: 'vCard Contacts', extensions: ['vcf'] }]);
@@ -738,7 +774,7 @@
       case 'del-deal':
         if (!(await askConfirm('Delete this deal? This cannot be undone.', 'Delete'))) return;
         if (editingId === id) stopEditing();
-        db.deals = db.deals.filter((d) => d.id !== id); save(); return renderToday();
+        db.deals = db.deals.filter((d) => d.id !== id); markDeleted(id); save(); return renderToday();
       case 'send': return sendTo(pid);
       case 'send-next': {
         const next = involvedParties().find((p) => L.normalizePhone(p.phone) && !isSent(p.id));
@@ -754,8 +790,10 @@
       case 'del-party':
         if (L.dealsForParty(db.deals, id).length) return toast('This party has deals, so it cannot be deleted.');
         if (!(await askConfirm('Delete this party?', 'Delete'))) return;
-        db.parties = db.parties.filter((p) => p.id !== id); save(); return renderParties();
+        db.parties = db.parties.filter((p) => p.id !== id); markDeleted(id); save(); return renderParties();
       case 'import-vcf': return handleImportVcf();
+      case 'export-sync': return handleExportSync();
+      case 'import-sync': return handleImportSync();
       case 'vcf-all': syncVcfGrid(); vcfRows.forEach((r) => (r.selected = true)); return renderParties();
       case 'vcf-none': syncVcfGrid(); vcfRows.forEach((r) => (r.selected = false)); return renderParties();
       case 'vcf-cancel': vcfRows = null; return renderParties();
@@ -777,7 +815,7 @@
       case 'load-sample': {
         if (db.parties.length && !(await askConfirm('Add the sample parties and deals to your existing data?', 'Add sample data'))) return;
         const sd = L.sampleData();
-        db.parties.push(...sd.parties); db.deals.push(...sd.deals); save();
+        db.parties.push(...sd.parties); db.deals.push(...sd.deals); stampMissing(); save();
         day = '2024-11-18'; billSel = { partyId: sd.parties[0].id, brokerId: sd.parties[0].brokerId || 'keval', from: '', to: '' };
         tab = 'bills'; return render();
       }
@@ -839,6 +877,10 @@
     db.parties = (db.parties || []).map((p) => Object.assign({ brokerId: 'keval' }, p));
     db.deals = (db.deals || []).map(L.migrateDeal);
     db.sent = db.sent || {};
+    db.deleted = db.deleted || {};
+    const fresh = !db.device;
+    db.device = db.device || newDevice();
+    if (stampMissing() || fresh) save();
     render();
   })();
 

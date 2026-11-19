@@ -21,7 +21,7 @@
   ];
 
   const DEFAULT_VARIETIES = { groundnut: ['G20', 'Jini'], soyabean: [], cotton: [], castor: [] };
-  const DEFAULT_RULE = { perBag: 1.5, roundStep: 5 };
+  const DEFAULT_RULE = { perBag: 2, roundStep: 5 };
 
   const KEVAL_BASE = {
     id: 'keval',
@@ -319,6 +319,98 @@
   let seq = 0;
   const newId = () => Date.now().toString(36) + (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
 
+  /* ---------- two-way sync between devices ----------
+     Every deal and party carries updatedAt (ms) and updatedFrom (device id). The newer record wins;
+     on an exact tie the larger updatedFrom wins, so both devices end with the same result.
+     Deletes are remembered in db.deleted = { id: { updatedAt, updatedFrom } }. */
+  const SYNC_TYPE = 'keval-sync';
+  function newer(a, b) {
+    const ta = Number(a && a.updatedAt) || 0;
+    const tb = Number(b && b.updatedAt) || 0;
+    if (ta !== tb) return ta > tb;
+    return String((a && a.updatedFrom) || '') > String((b && b.updatedFrom) || '');
+  }
+  function exportSync(db) {
+    return JSON.stringify({
+      type: SYNC_TYPE, version: 1, exportedAt: Date.now(), from: db.device || null,
+      parties: db.parties || [], deals: db.deals || [], deleted: db.deleted || {}, sent: db.sent || {},
+    }, null, 2);
+  }
+  function mergeSync(db, text) {
+    let inc;
+    try { inc = JSON.parse(String(text || '').replace(/^\uFEFF/, '')); } catch (_) { inc = null; }
+    if (!inc || inc.type !== SYNC_TYPE || !Array.isArray(inc.deals) || !Array.isArray(inc.parties)) {
+      return { error: 'This is not a Keval Brokers sync file.' };
+    }
+    const clone = (o) => JSON.parse(JSON.stringify(o));
+    const stats = { dealsAdded: 0, dealsUpdated: 0, dealsRemoved: 0, partiesAdded: 0, partiesUpdated: 0, partiesRemoved: 0 };
+
+    const deleted = Object.assign({}, db.deleted);
+    Object.keys(inc.deleted || {}).forEach((id) => {
+      if (!deleted[id] || newer(inc.deleted[id], deleted[id])) deleted[id] = inc.deleted[id];
+    });
+
+    // Parties: same id, or (for parties created separately on each device) same name.
+    const parties = (db.parties || []).slice();
+    const idMap = {};
+    const nameKey = (p) => String(p.name || '').trim().toLowerCase();
+    inc.parties.forEach((raw) => {
+      if (!raw || !raw.id) return;
+      const ip = clone(raw);
+      if (deleted[ip.id] && !newer(ip, deleted[ip.id])) return;
+      let at = parties.findIndex((p) => p.id === ip.id);
+      if (at < 0 && nameKey(ip)) {
+        at = parties.findIndex((p) => nameKey(p) === nameKey(ip));
+        if (at >= 0) { idMap[ip.id] = parties[at].id; ip.id = parties[at].id; }
+      }
+      if (at < 0) { parties.push(ip); stats.partiesAdded++; }
+      else if (newer(ip, parties[at])) { parties[at] = ip; stats.partiesUpdated++; }
+    });
+
+    // Deals
+    const deals = (db.deals || []).slice();
+    const index = new Map(deals.map((d, i) => [d.id, i]));
+    inc.deals.forEach((raw) => {
+      if (!raw || !raw.id) return;
+      const deal = migrateDeal(clone(raw));
+      deal.seller = idMap[deal.seller] || deal.seller;
+      deal.buyer = idMap[deal.buyer] || deal.buyer;
+      if (deleted[deal.id] && !newer(deal, deleted[deal.id])) return;
+      if (!index.has(deal.id)) { index.set(deal.id, deals.length); deals.push(deal); stats.dealsAdded++; }
+      else if (newer(deal, deals[index.get(deal.id)])) { deals[index.get(deal.id)] = deal; stats.dealsUpdated++; }
+    });
+
+    // Apply deletes. A record edited after its delete comes back and the delete note is dropped.
+    const keptDeals = deals.filter((d) => {
+      const t = deleted[d.id];
+      if (!t) return true;
+      if (newer(t, d)) { stats.dealsRemoved++; return false; }
+      delete deleted[d.id];
+      return true;
+    });
+    const used = new Set();
+    keptDeals.forEach((d) => { used.add(d.seller); used.add(d.buyer); });
+    const keptParties = parties.filter((p) => {
+      const t = deleted[p.id];
+      if (!t) return true;
+      if (!newer(t, p)) { delete deleted[p.id]; return true; }
+      if (used.has(p.id)) return true; // a deal still uses this party
+      stats.partiesRemoved++;
+      return false;
+    });
+
+    // "Sent" marks: keep the later one.
+    const sent = Object.assign({}, db.sent);
+    Object.keys(inc.sent || {}).forEach((k) => {
+      const s = inc.sent[k];
+      const [day, pid] = k.split('|');
+      const key = day + '|' + (idMap[pid] || pid);
+      if (!sent[key] || (Number((s || {}).at) || 0) > (Number(sent[key].at) || 0)) sent[key] = s;
+    });
+
+    return { parties: keptParties, deals: keptDeals, deleted, sent, stats };
+  }
+
   /* ---------- VCF (vCard) parsing ---------- */
   function decodeQuotedPrintable(str) {
     try {
@@ -365,7 +457,7 @@
               city: cur.city,
               role: 'buyer',
               brokerId: 'keval',
-              charge: false,
+              charge: true,
               perBag: DEFAULT_RULE.perBag,
               roundStep: DEFAULT_RULE.roundStep,
             });
@@ -486,7 +578,7 @@
       const matchedBroker = brokerRaw ? brokers.find((b) => b.id === brokerRaw || b.firm.toLowerCase().includes(brokerRaw) || brokerRaw.includes(b.id)) : null;
       const brokerId = matchedBroker ? matchedBroker.id : 'keval';
       const chargeRaw = iCharge >= 0 ? (cells[iCharge] || '').trim().toLowerCase() : '';
-      const charge = ['yes', 'y', '1', 'true'].includes(chargeRaw);
+      const charge = chargeRaw === '' ? true : ['yes', 'y', '1', 'true'].includes(chargeRaw);
       const perBagVal = iPerBag >= 0 && cells[iPerBag] !== '' && isFinite(Number(cells[iPerBag])) ? Number(cells[iPerBag]) : DEFAULT_RULE.perBag;
       const roundVal = iRound >= 0 && cells[iRound] !== '' && isFinite(Number(cells[iRound])) ? Number(cells[iRound]) : DEFAULT_RULE.roundStep;
 
@@ -499,6 +591,7 @@
         if (iCharge >= 0 && chargeRaw) existing.charge = charge;
         if (iPerBag >= 0 && cells[iPerBag] !== '') existing.rule.perBag = perBagVal;
         if (iRound >= 0 && cells[iRound] !== '') existing.rule.roundStep = roundVal;
+        delete existing.updatedAt; delete existing.updatedFrom; // app re-stamps
         updated++;
       } else {
         list.push({
@@ -604,13 +697,14 @@
           phone: '',
           role: defaultRole,
           brokerId: 'keval',
-          charge: false,
+          charge: true,
           rule: { perBag: DEFAULT_RULE.perBag, roundStep: DEFAULT_RULE.roundStep },
         };
         parties.push(p);
         createdParties++;
       } else if (city && !p.city) {
         p.city = city.trim();
+        delete p.updatedAt; delete p.updatedFrom; // app re-stamps
       }
       return p;
     }
@@ -691,7 +785,7 @@
 
   /* The 2024-25 bill of Vrundavan Trading, used for demo data and tests. */
   function sampleData() {
-    const mk = (name, city, role, charge, brokerId) => ({ id: newId(), name, city, phone: '', role, brokerId: brokerId || 'keval', charge, rule: { perBag: 1.5, roundStep: 5 } });
+    const mk = (name, city, role, charge, brokerId) => ({ id: newId(), name, city, phone: '', role, brokerId: brokerId || 'keval', charge, rule: { perBag: 2, roundStep: 5 } });
     const v = mk('Vrundavan Trading', 'Kalavad', 'seller', true, 'keval');
     const g = mk('Ganesh Oil Industries', 'Upleta', 'buyer', false, 'keval');
     const b = mk('Balaji Proteins', 'Upleta', 'buyer', false, 'chetan');
@@ -716,6 +810,7 @@
     normalizePhone, shortPhone, waLink,
     unitsOf, unitInfo, unitsToText, parseUnits, dealBags, isPending, hasSplit, migrateDeal,
     ratesText, qtyText, commodityName, varietiesFor, dealsForParty, buildMessage, billRows, dealBrokerage, periodSummary,
+    exportSync, mergeSync,
     parseVcf, toCsv, parseCsv, partiesToCsv, parsePartiesCsv, dealsToCsv, parseDealsCsv,
     newId, sampleData,
   };

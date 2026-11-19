@@ -5,7 +5,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test/logic.test.js && node test/smoke.test.js",
+    "build:pwa": "node scripts/build-pwa.js",
+    "deploy:pwa": "node scripts/build-pwa.js && npx netlify-cli deploy --prod --dir=pwa",
+    "test": "node test/logic.test.js && node test/sync.test.js && node test/smoke.test.js",
     "dist": "electron-builder --win"
   },
   "devDependencies": {
